@@ -333,6 +333,59 @@ jobs:
           name: c3-linux-Debug
           path: c3-linux-Debug.tar.gz
 
+  build-linux-aarch64:
+    name: Linux (aarch64) Ubuntu
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Get current date context
+        id: date
+        run: echo "date=$(date +'${{ env.CACHE_INVALIDATION_SEED }}')" >> $GITHUB_OUTPUT
+      - name: Cache APT archives
+        uses: actions/cache@v6
+        with:
+          path: apt-cache
+          key: apt-cache-${{ runner.os }}-${{ steps.date.outputs.date }}
+      - run: |
+          mkdir -p apt-cache/partial
+          for i in 1 2 3; do sudo apt-get update && break || sleep 2; done
+          for i in 1 2 3; do sudo apt-get install -y -o dir::cache::archives="$(pwd)/apt-cache" --fix-missing zlib1g zlib1g-dev python3 ninja-build curl libcurl4-openssl-dev libx11-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev libxcursor-dev && break || sleep 2; done
+          sudo chown -R $USER:$USER apt-cache
+
+      - name: CMake Build (Release)
+        run: |
+          cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DC3_FETCH_LLVM=ON
+          cmake --build build-release
+
+      - name: Bundle & Upload (Linux aarch64 Release)
+        run: |
+          bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-linux-aarch64-Release" "tar"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: c3-linux-aarch64-Release
+          path: c3-linux-aarch64-Release.tar.gz
+
+      - name: CMake Build (Debug)
+        run: |
+          cmake -B build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DC3_FETCH_LLVM=ON
+          cmake --build build-debug
+
+      - name: Cache FreeBSD Sysroot
+        uses: actions/cache@v6
+        with:
+          path: .cache
+          key: ${{ runner.os }}-freebsd-sysroot-15.0
+      - name: Run Unified Tests
+        run: ./scripts/tools/ci_tests.sh "./build-debug/c3c"
+
+      - name: Bundle & Upload (Linux aarch64 Debug)
+        run: |
+          bash ./scripts/tools/package_build.sh "./build-debug/c3c" "c3-linux-aarch64-Debug" "tar"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: c3-linux-aarch64-Debug
+          path: c3-linux-aarch64-Debug.tar.gz
+
   test-emscripten-32bit:
     name: Emscripten
     needs: build-linux
@@ -971,7 +1024,7 @@ jobs:
   
   release:
     runs-on: ubuntu-slim
-    needs: [build-msvc, build-msvc-arm64, build-linux, build-mac, build-linux-alpine, build-openbsd, build-netbsd, build-android, build-linux-musl-static]
+    needs: [build-msvc, build-msvc-arm64, build-linux, build-linux-aarch64, build-mac, build-linux-alpine, build-openbsd, build-netbsd, build-android, build-linux-musl-static]
     if: github.ref == 'refs/heads/master' || endsWith(github.ref, '.x')
     permissions:
       contents: write
@@ -986,7 +1039,7 @@ jobs:
       - name: Prepare Assets
         run: |
           for config in Release Debug; do
-            for platform in windows windows-aarch64 macos linux linux-musl linux-static openbsd netbsd android-aarch64 android-x86_64 windows-setup windows-setup-aarch64; do
+            for platform in windows windows-aarch64 macos linux linux-aarch64 linux-musl linux-static openbsd netbsd android-aarch64 android-x86_64 windows-setup windows-setup-aarch64; do
               if [ "$platform" = "windows-setup" ] || [ "$platform" = "windows-setup-aarch64" ]; then
                 ext="exe"
               # Windows and macOS produce zip, others tar.gz
