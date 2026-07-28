@@ -13,6 +13,9 @@
     "linux-x64": {
       "cflags": "-fPIE"
     },
+    "linux-aarch64": {
+      "cflags": "-fPIE"
+    },
     "windows-x64": {
       "c-include-dirs": [
         "C:\\"
